@@ -3,7 +3,9 @@ const { customer_register, agent_register, seller_register, login, sendOtp, data
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const config = require('config');
-const { createConnection } = require('mysql2/promise');
+// redis storage
+const redis = require('redis');
+const client = redis.createClient();
 
 // signup api
 async function customerSignup(req, res) {
@@ -24,7 +26,7 @@ async function customerSignup(req, res) {
         console.log(createResponse);
         delete body.password;
         delete body.otp;
-        const token = jwt.sign({ foo: body }, config.get('jwt.secretKey'), { expiresIn: "4h" });
+        const token = jwt.sign({ foo: body }, config.get('jwt.secretKey'));
         return res.status(200).send({
             "status": 200,
             "message": "signup successfull",
@@ -32,7 +34,7 @@ async function customerSignup(req, res) {
                 ...body,
                 user_id: createResponse[0].insertId,
                 customer_id: createResponse[1].insertId,
-                jsonWebToken: token
+                jsonWebToken: token,
             }
         });
     } catch (error) {
@@ -60,7 +62,7 @@ async function agentSignup(req, res) {
 
         const createResponse = await agent_register(body);
         delete body.password;
-        const token = jwt.sign({ foo: body }, config.get('jwt.secretKey'), { expiresIn: "4h" });
+        const token = jwt.sign({ foo: body }, config.get('jwt.secretKey'));
         return res.status(200).send({
             "status": 200,
             "message": "signup successfull",
@@ -137,6 +139,10 @@ async function signin(req, res) {
         } else {
             createResponse.password = undefined;
             const token = jwt.sign({ foo: createResponse }, config.get("jwt.secretKey"));
+            client.set('jwt', token);
+            // await client.get("jwt", function(err, reply) {
+            //     console.log("token stored in redis " + reply.toString()); 
+            // });
             return res.status(200).send({
                 "status": 200,
                 "message": "successful login",
@@ -231,6 +237,8 @@ async function resetPassword(req, res) {
                 "error": result.error.details[0].message
             });
         }
+        // hashing password
+        body.reset_password = await bcrypt.hash(body.reset_password, 10)
         const createResponse = await setPassword(body);
         // if (createResponse.affectedRows == 0) {
         //     return res.status(400).send({
@@ -246,6 +254,7 @@ async function resetPassword(req, res) {
             }
         })
     } catch (error) {
+        console.log(error);
         return res.status(400).send({
             "status": 400,
             "error": error
@@ -271,7 +280,6 @@ async function getdata(req, res) {
         })
     }
 }
-
 
 module.exports = {
     customerSignup,
